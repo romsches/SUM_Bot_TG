@@ -137,11 +137,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
     """Главная асинхронная функция для запуска бота."""
     if not TOKEN_TELEGRAM:
-        logging.error("Ошибка: Переменная TELEGRAM_TOKEN не найдена.")
-        return # Добавлено: завершение работы, если токен не найден
+        logging.error("Ошибка: Переменная TELEGRAM_TOKEN не найдена. Пожалуйста, добавьте ее.")
+        return
     if not HF_TOKEN:
-        logging.error("Ошибка: Переменная HF_TOKEN не найдена.")
-        return # Добавлено: завершение работы, если токен не найден
+        logging.error("Ошибка: Переменная HF_TOKEN не найдена. Пожалуйста, добавьте ее.")
+        return
 
     app = Application.builder().token(TOKEN_TELEGRAM).build()
     
@@ -152,19 +152,25 @@ async def main():
     if IS_RUNNING_ON_RENDER:
         if not TELEGRAM_WEBHOOK_URL:
             logging.error("Ошибка: Бот запущен на Render, но переменная TELEGRAM_WEBHOOK_URL не найдена. Пожалуйста, добавьте ее.")
-            return # Добавлено: завершение работы, если URL вебхука не найден
-        # Явно удаляем предыдущие вебхуки, чтобы избежать конфликта
-        await app.bot.delete_webhook()
-        await app.bot.set_webhook(url=TELEGRAM_WEBHOOK_URL)
-        print("Бот запущен в режиме webhook на Render.")
-        await app.run_webhook(
-            listen="0.0.0.0",
-            port=int(os.getenv("PORT", "8080")),
-            url_path="/webhook",
-            webhook_url=TELEGRAM_WEBHOOK_URL
-        )
+            return
+        
+        try:
+            # Сначала удаляем все старые вебхуки, чтобы избежать конфликта
+            await app.bot.delete_webhook()
+            await app.bot.set_webhook(url=TELEGRAM_WEBHOOK_URL)
+            logging.info("Бот запущен в режиме webhook на Render.")
+            await app.run_webhook(
+                listen="0.0.0.0",
+                port=int(os.getenv("PORT", "8080")),
+                url_path="/webhook",
+                webhook_url=TELEGRAM_WEBHOOK_URL
+            )
+        except telegram.error.Conflict as e:
+            logging.error(f"Конфликт вебхука: {e}")
+            logging.info("Попытка повторного запуска в режиме polling для отладки...")
+            await app.run_polling()
     else:
-        print("Бот запущен в режиме polling (локально).")
+        logging.info("Бот запущен в режиме polling (локально).")
         await app.run_polling()
 
 if __name__ == "__main__":
