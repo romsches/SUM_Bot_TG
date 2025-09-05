@@ -149,7 +149,10 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, summarize))
     app.add_handler(CallbackQueryHandler(button))
 
-    if IS_RUNNING_ON_RENDER and TELEGRAM_WEBHOOK_URL:
+    if IS_RUNNING_ON_RENDER:
+        if not TELEGRAM_WEBHOOK_URL:
+            logging.error("Ошибка: Бот запущен на Render, но переменная TELEGRAM_WEBHOOK_URL не найдена. Пожалуйста, добавьте ее.")
+            return
         await app.bot.set_webhook(url=TELEGRAM_WEBHOOK_URL)
         print("Бот запущен в режиме webhook на Render.")
         await app.run_webhook(
@@ -159,7 +162,7 @@ async def main():
             webhook_url=TELEGRAM_WEBHOOK_URL
         )
     else:
-        print("Бот запущен в режиме polling (локально или без URL).")
+        print("Бот запущен в режиме polling (локально).")
         await app.run_polling()
 
 if __name__ == "__main__":
