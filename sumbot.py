@@ -138,10 +138,10 @@ async def main():
     """Главная асинхронная функция для запуска бота."""
     if not TOKEN_TELEGRAM:
         logging.error("Ошибка: Переменная TELEGRAM_TOKEN не найдена.")
-        return
+        return # Добавлено: завершение работы, если токен не найден
     if not HF_TOKEN:
         logging.error("Ошибка: Переменная HF_TOKEN не найдена.")
-        return
+        return # Добавлено: завершение работы, если токен не найден
 
     app = Application.builder().token(TOKEN_TELEGRAM).build()
     
@@ -152,7 +152,7 @@ async def main():
     if IS_RUNNING_ON_RENDER:
         if not TELEGRAM_WEBHOOK_URL:
             logging.error("Ошибка: Бот запущен на Render, но переменная TELEGRAM_WEBHOOK_URL не найдена. Пожалуйста, добавьте ее.")
-            return
+            return # Добавлено: завершение работы, если URL вебхука не найден
         # Явно удаляем предыдущие вебхуки, чтобы избежать конфликта
         await app.bot.delete_webhook()
         await app.bot.set_webhook(url=TELEGRAM_WEBHOOK_URL)
