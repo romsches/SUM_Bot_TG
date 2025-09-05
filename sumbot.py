@@ -158,7 +158,7 @@ async def main():
         await app.run_webhook(
             listen="0.0.0.0",
             port=int(os.getenv("PORT", "8080")),
-            url_path=f"/{os.getenv('TOKEN_TELEGRAM')}",
+            url_path="/webhook",
             webhook_url=TELEGRAM_WEBHOOK_URL
         )
     else:
