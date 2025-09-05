@@ -153,6 +153,8 @@ async def main():
         if not TELEGRAM_WEBHOOK_URL:
             logging.error("Ошибка: Бот запущен на Render, но переменная TELEGRAM_WEBHOOK_URL не найдена. Пожалуйста, добавьте ее.")
             return
+        # Явно удаляем предыдущие вебхуки, чтобы избежать конфликта
+        await app.bot.delete_webhook()
         await app.bot.set_webhook(url=TELEGRAM_WEBHOOK_URL)
         print("Бот запущен в режиме webhook на Render.")
         await app.run_webhook(
