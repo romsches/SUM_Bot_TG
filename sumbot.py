@@ -8,20 +8,20 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from bs4 import BeautifulSoup
 import telegram.constants
 
-# Включаем логирование, чтобы видеть ошибки
+# Enable logging to view errors
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
 
-# --- Константы и токены ---
+# --- Constants and tokens ---
 TOKEN_TELEGRAM = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-# Переменные для работы с Render
+# Variables for working with Render
 TELEGRAM_WEBHOOK_URL = os.getenv("TELEGRAM_WEBHOOK_URL")
 IS_RUNNING_ON_RENDER = os.getenv("RENDER") == "true"
 
-# URL-адреса API для суммаризации и перевода
+# API URLs for summarization and translation
 API_SUMMARY = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
 API_TRANSLATE = {
     "en": "https://api-inference.huggingface.co/models/Helsinki-NLP/opus-mt-en-en",
@@ -30,9 +30,9 @@ API_TRANSLATE = {
 }
 headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
-# --- Вспомогательные функции (выполняются в отдельном потоке) ---
+# --- Support functions (executed in a separate thread) ---
 def get_text_from_url_sync(url):
-    """Синхронно извлекает основной текст статьи с веб-страницы."""
+    """Synchronously extracts the main article text from a web page."""
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -41,13 +41,13 @@ def get_text_from_url_sync(url):
         article_text = "\n".join([p.get_text() for p in paragraphs])
         return article_text
     except requests.exceptions.RequestException as e:
-        logging.error(f"Ошибка при запросе URL: {e}")
+        logging.error(f"Error requesting URL: {e}")
         return None
 
 def summarize_with_api_sync(text):
-    """Синхронно отправляет текст на суммаризацию."""
+    """Synchronously sends text for summarization."""
     if not HF_TOKEN:
-        raise ValueError("HF_TOKEN не установлен.")
+        raise ValueError("HF_TOKEN is not set.")
     payload = {"inputs": text, "parameters": {"min_length": 50, "max_length": 150}}
     response = requests.post(API_SUMMARY, headers=headers, json=payload)
     response.raise_for_status()
@@ -55,40 +55,40 @@ def summarize_with_api_sync(text):
     return summary
 
 def translate_with_api_sync(text, lang):
-    """Синхронно переводит текст с помощью API Hugging Face."""
+    """Synchronously translates text using the Hugging Face API."""
     if not HF_TOKEN:
-        raise ValueError("HF_TOKEN не установлен.")
+        raise ValueError("HF_TOKEN is not set.")
     if lang not in API_TRANSLATE:
-        raise ValueError("Неподдерживаемый язык.")
+        raise ValueError("Unsupported language.")
     payload = {"inputs": text}
     response = requests.post(API_TRANSLATE[lang], headers=headers, json=payload)
     response.raise_for_status()
     translated_text = response.json()[0]['translation_text']
     return translated_text
 
-# --- Команды и обработчики ---
+# --- Commands and Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет простое приветственное сообщение."""
-    await update.message.reply_text("Привет! Отправьте мне ссылку на статью, и я сделаю краткий отчёт.")
+    """Sends a simple welcome message."""
+    await update.message.reply_text("Hello! Send me an article link, and I will create a summary report.")
 
 async def summarize(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Суммаризирует текст статьи по ссылке."""
+    """Summarizes article text from a provided link."""
     url = update.message.text
-    await update.message.reply_text("Получаю текст и делаю отчёт...")
+    await update.message.reply_text("Fetching text and generating report...")
     
     try:
-        # Запускаем синхронные функции в отдельном потоке, чтобы не блокировать бота
+        # Run synchronous functions in a separate thread to avoid blocking the bot
         article_text = await asyncio.get_event_loop().run_in_executor(None, get_text_from_url_sync, url)
         if not article_text:
-            await update.message.reply_text("Не удалось получить текст по этой ссылке. Пожалуйста, проверьте URL.")
+            await update.message.reply_text("Could not extract text from this link. Please check the URL.")
             return
 
         summary = await asyncio.get_event_loop().run_in_executor(None, summarize_with_api_sync, article_text[:2000])
         
-        # Сохраняем в контекст, чтобы потом перевести
+        # Save to user_data for later translation
         context.user_data["summary"] = summary
         
-        # Кнопки выбора языка
+        # Language selection buttons
         keyboard = [
             [InlineKeyboardButton("English 🇬🇧", callback_data="en")],
             [InlineKeyboardButton("Deutsch 🇩🇪", callback_data="de")],
@@ -96,35 +96,35 @@ async def summarize(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text("Готово! На каком языке показать отчёт?", reply_markup=reply_markup)
+        await update.message.reply_text("Done! In which language would you like to see the report?", reply_markup=reply_markup)
     except Exception as e:
-        await update.message.reply_text(f"Ошибка: {e}")
+        await update.message.reply_text(f"Error: {e}")
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает нажатия на кнопки выбора языка."""
+    """Handles language selection button clicks."""
     query = update.callback_query
     await query.answer()
     
     lang = query.data
-    summary = context.user_data.get("summary", "Нет текста для перевода.")
+    summary = context.user_data.get("summary", "No text found for translation.")
     
-    await query.edit_message_text("Перевожу...")
+    await query.edit_message_text("Translating...")
     
     try:
-        # Запускаем синхронную функцию перевода в отдельном потоке
+        # Run synchronous translation in a separate thread
         translated = await asyncio.get_event_loop().run_in_executor(None, translate_with_api_sync, summary, lang)
-        await query.edit_message_text(f"📌 Итоговый отчёт:\n\n{translated}", parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
+        await query.edit_message_text(f"📌 **Final Report:**\n\n{translated}", parse_mode=telegram.constants.ParseMode.MARKDOWN_V2)
     except Exception as e:
-        await query.edit_message_text(f"Ошибка при переводе: {e}")
+        await query.edit_message_text(f"Translation error: {e}")
 
-# --- Запуск бота (с автоматическим выбором режима) ---
+# --- Bot Launch (with automatic mode selection) ---
 async def main():
-    """Главная асинхронная функция для запуска бота."""
+    """Main asynchronous function to launch the bot."""
     if not TOKEN_TELEGRAM:
-        logging.error("Ошибка: Переменная TELEGRAM_TOKEN не найдена. Пожалуйста, добавьте ее.")
+        logging.error("Error: TELEGRAM_TOKEN variable not found. Please add it.")
         return
     if not HF_TOKEN:
-        logging.error("Ошибка: Переменная HF_TOKEN не найдена. Пожалуйста, добавьте ее.")
+        logging.error("Error: HF_TOKEN variable not found. Please add it.")
         return
 
     app = Application.builder().token(TOKEN_TELEGRAM).build()
@@ -133,28 +133,28 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, summarize))
     app.add_handler(CallbackQueryHandler(button))
 
-    # Определяем, где запущен бот
+    # Detect execution environment
     if IS_RUNNING_ON_RENDER:
         if not TELEGRAM_WEBHOOK_URL:
-            logging.error("Ошибка: Бот запущен на Render, но переменная TELEGRAM_WEBHOOK_URL не найдена. Пожалуйста, добавьте ее.")
+            logging.error("Error: Running on Render but TELEGRAM_WEBHOOK_URL is missing.")
             return
         
         try:
-            # Сначала удаляем все старые вебхуки, чтобы избежать конфликта
+            # Clear old webhooks to avoid conflicts
             await app.bot.delete_webhook()
-            # Устанавливаем новый вебхук
+            # Set new webhook
             await app.bot.set_webhook(url=TELEGRAM_WEBHOOK_URL)
-            logging.info("Бот запущен в режиме webhook на Render.")
+            logging.info("Bot started in webhook mode on Render.")
             await app.run_webhook(
                 listen="0.0.0.0",
                 port=int(os.getenv("PORT", "8080")),
                 url_path="/"
             )
         except Exception as e:
-            logging.error(f"Критическая ошибка при запуске в режиме webhook: {e}")
+            logging.error(f"Critical error during webhook startup: {e}")
     else:
-        # Режим polling для локальной разработки
-        logging.info("Бот запущен в режиме polling (локально).")
+        # Polling mode for local development
+        logging.info("Bot started in polling mode (local).")
         await app.run_polling()
 
 if __name__ == "__main__":
